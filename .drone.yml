@@ -1,0 +1,68 @@
+global-variables:
+  - &default_docker_settings
+    repo: lcr.logicspark.com/plutonyx/airflow-dind
+    registry: lcr.logicspark.com
+    dockerfile: Dockerfile
+    storage_path: /drone/src
+    username:
+      from_secret: docker_username
+    password:
+      from_secret: docker_password
+    create_repository: true
+    use_cache: false
+
+  - &default_cache_settings
+    image: drillster/drone-volume-cache
+    settings:
+    volumes:
+      - name: cache
+        path: /cache
+    when:
+      ref:
+        include:
+          - refs/heads/feature/*
+          - refs/heads/main
+          - refs/heads/develop
+          - refs/tags/*
+      event:
+        include:
+          - push
+          - pull_request
+          - tag
+
+kind: pipeline
+type: docker
+
+volumes:
+  - name: cache
+    host:
+      path: /tmp/cache
+
+image_pull_secrets:
+  - dockerconfigjson
+
+steps:
+  - name: restore-cache
+    <<: *default_cache_settings
+    settings:
+      restore: true
+      mount:
+        - ./docker
+
+  - name: build-prod-image
+    image: plugins/docker
+    settings:
+      <<: *default_docker_settings
+      auto_tag: true
+      tag:
+        - 2.0.0-python3.8
+        - 2.0.0-python3.8-${DRONE_BUILD_NUMBER}
+    # when:
+    #   event: tag
+
+  - name: rebuild-cache
+    <<: *default_cache_settings
+    settings:
+      rebuild: true
+      mount:
+        - ./docker
